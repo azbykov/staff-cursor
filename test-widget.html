@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Тест Яндекс Виджет</title>
+    <script src="https://yastatic.net/s3/passport-sdk/autofill/v1/sdk-suggest-with-polyfills-latest.js"></script>
+</head>
+<body>
+    <h1>Тест Яндекс Авторизации (Виджет)</h1>
+    
+    <script>
+        window.onload = function() {
+            try {
+                console.log('Начинаем инициализацию виджета...22');
+                
+                YaAuthSuggest.init(
+                    {
+                        client_id: '36e55332194045a19d8f419a1008ed4b',
+                        response_type: 'token',
+                        redirect_uri: 'http://localhost:3000/api/auth/callback/yandex',
+                        origin: 'http://localhost:3000',
+                        mode: 'popup',
+                        scope: 'login:info login:email'
+                    },
+                    'http://localhost:8080'
+                )
+                .then(({ handler }) => {
+                    console.log('Виджет инициализирован, вызываем handler...');
+                    return handler();
+                })
+                .then(data => {
+                    console.log('Успешная авторизация:', data);
+                })
+                .catch(error => {
+                    console.error('Ошибка авторизации:', {
+                        error,
+                        status: error.status,
+                        code: error.code,
+                        message: error.message
+                    });
+                });
+                
+            } catch (error) {
+                console.error('Ошибка при инициализации:', error);
+            }
+        };
+    </script>
+</body>
+</html> 
