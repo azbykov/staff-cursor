@@ -1,77 +1,47 @@
 'use client';
 
-import { Card, Form, Input, Button, message, Divider } from 'antd';
-import { UserOutlined, LockOutlined } from '@ant-design/icons';
-import { useAuthStore } from '@/store/authStore';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { useEffect } from 'react';
-import YandexAuthButton from '@/components/YandexAuthButton';
+import { signIn } from 'next-auth/react';
+import { Form, Input, Button, Card, Divider, Typography } from 'antd';
 import Link from 'next/link';
+import { UserOutlined, LockOutlined } from '@ant-design/icons';
 
-interface LoginForm {
-  email: string;
-  password: string;
-}
+const { Title } = Typography;
 
 export default function LoginPage() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const { login, isAuthenticated } = useAuthStore();
   const [form] = Form.useForm();
 
-  useEffect(() => {
-    if (isAuthenticated) {
-      router.push('/dashboard');
-      return;
-    }
-  }, [isAuthenticated, router]);
-
-  const onFinish = async (values: LoginForm) => {
-    try {
-      const response = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(values),
-      });
-
-      if (!response.ok) {
-        throw new Error('Ошибка авторизации');
-      }
-
-      const data = await response.json();
-      login(data.user);
-      message.success('Успешная авторизация!');
-
-      const callbackUrl = searchParams.get('callbackUrl');
-      router.push(callbackUrl || '/dashboard');
-      router.refresh();
-
-    } catch (error) {
-      message.error('Ошибка при входе в систему');
-    }
+  const onFinish = async (values: any) => {
+    const result = await signIn('credentials', {
+      email: values.email,
+      password: values.password,
+      redirect: true,
+      callbackUrl: '/dashboard'
+    });
   };
 
-  if (isAuthenticated) {
-    return <div />;
-  }
-
   return (
-    <Card bordered={false} className="shadow-md">
-      <h1 className="text-2xl font-bold text-center mb-8">Вход в систему</h1>
-      
-      <YandexAuthButton />
+    <Card className="w-full max-w-md">
+      <Title level={2} className="text-center mb-6">
+        Вход в систему
+      </Title>
+
+      {/* Яндекс авторизация */}
+      <Button
+        block
+        size="large"
+        onClick={() => signIn('yandex', { callbackUrl: '/dashboard' })}
+        className="mb-4"
+      >
+        Войти через Яндекс
+      </Button>
 
       <Divider>или</Divider>
 
+      {/* Форма входа по email */}
       <Form
         form={form}
-        name="login"
         onFinish={onFinish}
         layout="vertical"
-        requiredMark={false}
-        suppressHydrationWarning
       >
         <Form.Item
           name="email"
@@ -81,7 +51,7 @@ export default function LoginPage() {
           ]}
         >
           <Input 
-            prefix={<UserOutlined className="text-gray-400" />} 
+            prefix={<UserOutlined />} 
             placeholder="Email" 
             size="large"
           />
@@ -91,28 +61,32 @@ export default function LoginPage() {
           name="password"
           rules={[{ required: true, message: 'Введите пароль' }]}
         >
-          <Input.Password
-            prefix={<LockOutlined className="text-gray-400" />}
+          <Input.Password 
+            prefix={<LockOutlined />} 
             placeholder="Пароль"
             size="large"
           />
         </Form.Item>
 
         <Form.Item>
-          <Button type="primary" htmlType="submit" size="large" block>
+          <Button type="primary" htmlType="submit" block size="large">
             Войти
           </Button>
         </Form.Item>
+      </Form>
 
-        <div className="text-center">
+      {/* Ссылка на регистрацию */}
+      <div className="text-center mt-4">
+        <p className="text-gray-600">
+          Ещё нет аккаунта?{' '}
           <Link 
-            href="/auth/register/step1" 
+            href="/auth/register" 
             className="text-blue-600 hover:text-blue-800"
           >
-            Зарегистрировать компанию
+            Зарегистрироваться
           </Link>
-        </div>
-      </Form>
+        </p>
+      </div>
     </Card>
   );
 } 

@@ -132,7 +132,7 @@ export default function RegisterPage() {
         <div className="text-center">
           <Text className="text-gray-600">
             Уже есть аккаунт?{' '}
-            <Link href="/login" className="text-blue-600 hover:text-blue-500">
+            <Link href="auth/login" className="text-blue-600 hover:text-blue-500">
               Войти
             </Link>
           </Text>

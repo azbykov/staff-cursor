@@ -29,7 +29,7 @@ export default function RegisterStep2() {
       }
 
       message.success('Регистрация успешна!');
-      router.push('/auth/login');
+      router.push('/dashboard');
     } catch (error) {
       message.error(error instanceof Error ? error.message : 'Ошибка при регистрации');
     }

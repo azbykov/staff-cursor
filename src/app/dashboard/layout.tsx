@@ -1,27 +1,33 @@
 'use client';
 
-import { Layout, Menu, Avatar, ConfigProvider } from 'antd';
+import { Layout, Menu, Avatar, ConfigProvider, Dropdown } from 'antd';
 import { 
-  UserOutlined, 
   TeamOutlined,
   CalendarOutlined,
   FileOutlined,
-  SettingOutlined,
+  UserOutlined,
   LogoutOutlined,
 } from '@ant-design/icons';
 import { useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
-import Link from 'next/link';
+import { signOut } from "next-auth/react";
 
 const { Sider, Content } = Layout;
 
 interface User {
+  id: string;
   email: string;
+  firstName: string | null;
+  lastName: string | null;
+  role: string;
   employee?: {
-    firstName: string;
-    lastName: string;
     position: string;
+    department?: {
+      name: string;
+    };
   };
+  avatarUrl?: string;
+  image?: string;
 }
 
 export default function DashboardLayout({
@@ -50,27 +56,42 @@ export default function DashboardLayout({
 
   const handleLogout = async () => {
     try {
-      const response = await fetch('/api/auth/logout', {
-        method: 'POST'
+      await signOut({ 
+        redirect: true,
+        callbackUrl: "/auth/login"
       });
-      
-      if (response.ok) {
-        router.push('/auth/login');
-      }
     } catch (error) {
       console.error('Logout error:', error);
     }
   };
+
+  const userMenuItems = [
+    {
+      key: 'profile',
+      icon: <UserOutlined />,
+      label: 'Профиль',
+      onClick: () => router.push('/dashboard/profile'),
+    },
+    {
+      type: 'divider',
+    },
+    {
+      key: 'logout',
+      icon: <LogoutOutlined />,
+      label: 'Выйти',
+      onClick: handleLogout,
+      danger: true,
+    },
+  ];
 
   return (
     <ConfigProvider
       theme={{
         token: {
           colorPrimary: '#6366f1',
-          colorBgContainer: '#0f0a2c',
-          colorBgElevated: '#1a1745',
-          colorText: '#ffffff',
-          colorTextSecondary: '#9ca3af',
+          colorBgContainer: '#ffffff',
+          colorText: '#000000',
+          colorTextSecondary: '#6b7280',
           borderRadius: 8,
         },
         components: {
@@ -82,7 +103,7 @@ export default function DashboardLayout({
         }
       }}
     >
-      <Layout style={{ minHeight: '100vh', background: '#0f0a2c' }}>
+      <Layout style={{ minHeight: '100vh' }}>
         <Sider
           width={250}
           style={{
@@ -96,14 +117,32 @@ export default function DashboardLayout({
             borderRight: '1px solid #1a1745',
           }}
         >
-          {/* Company Logo & Name */}
-          <div className="px-4 mb-8 flex items-center space-x-3">
-            <Avatar style={{ backgroundColor: '#1a1745' }}>A</Avatar>
-            <div className="flex flex-col">
-              <span className="font-medium text-white">Acme Inc</span>
-              <span className="text-xs text-gray-400">Owner</span>
+          {/* User Profile with Dropdown */}
+          <Dropdown
+            menu={{ items: userMenuItems }}
+            trigger={['click']}
+            placement="bottomRight"
+          >
+            <div className="px-4 mb-8 cursor-pointer hover:bg-[#1a1745] transition-colors duration-200">
+              <div className="flex items-center space-x-3 mb-2 py-2">
+                <Avatar 
+                  size={40} 
+                  src={user?.image}
+                  style={{ backgroundColor: '#1a1745' }}
+                >
+                  {!user?.image && `${user?.firstName?.[0]}${user?.lastName?.[0]}`}
+                </Avatar>
+                <div className="flex flex-col">
+                  <span className="font-medium text-white">
+                    {user?.firstName} {user?.lastName}
+                  </span>
+                  <span className="text-xs text-gray-400">
+                    {user?.employee?.position} {user?.employee?.department?.name ? `in ${user?.employee?.department.name}` : ''}
+                  </span>
+                </div>
+              </div>
             </div>
-          </div>
+          </Dropdown>
 
           {/* Main Navigation */}
           <Menu
@@ -132,29 +171,15 @@ export default function DashboardLayout({
             ]}
           />
 
-          {/* Bottom Section */}
-          <div className="absolute bottom-0 w-full px-4 pb-4">
-            <Menu
-              theme="dark"
-              mode="inline"
-              style={{ background: 'transparent', border: 'none' }}
-              selectable={false}
-              items={[
-                {
-                  key: 'settings',
-                  icon: <SettingOutlined />,
-                  label: 'Настройки',
-                  onClick: () => router.push('/dashboard/settings')
-                },
-                {
-                  key: 'logout',
-                  icon: <LogoutOutlined />,
-                  label: 'Выйти',
-                  onClick: handleLogout,
-                  danger: true
-                }
-              ]}
-            />
+          {/* Company Info */}
+          <div className="absolute bottom-0 w-full p-4 border-t border-[#1a1745]">
+            <div className="flex items-center space-x-3">
+              <Avatar style={{ backgroundColor: '#1a1745' }}>A</Avatar>
+              <div className="flex flex-col">
+                <span className="font-medium text-white">Acme Inc</span>
+                <span className="text-xs text-gray-400">Owner</span>
+              </div>
+            </div>
           </div>
         </Sider>
 

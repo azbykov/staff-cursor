@@ -1,168 +1,114 @@
 import { NextResponse } from 'next/server';
-import { PrismaClient, Prisma, Company, Department, User } from '@prisma/client';
+import { PrismaClient, Prisma, Role } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import * as jwt from 'jsonwebtoken';
-import { cookies } from 'next/headers';
 
 const prisma = new PrismaClient();
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 
-let newCompany: Company | null = null;
-let newUser: User | null = null;
-let defaultDepartment: Department | null = null;
-
 export async function POST(request: Request) {
   try {
-    const { email, password, firstName, lastName } = await request.json();
+    const { company, user } = await request.json();
     
-    const hashedPassword = await bcrypt.hash(password, 10);
-    
-    const user = await prisma.user.create({
-      data: {
-        email,
-        password: hashedPassword,
-        firstName,
-        lastName,
-        role: 'EMPLOYEE'
-      }
-    });
-
-    // Проверяем, существует ли пользователь с таким email
+    // Проверяем существование пользователя
     const existingUser = await prisma.user.findUnique({
       where: { email: user.email }
     });
-    console.log('Existing user check:', existingUser);
 
     if (existingUser) {
-      return new NextResponse(
-        JSON.stringify({
-          success: false,
-          error: 'Пользователь с таким email уже существует'
-        }),
-        {
-          status: 400,
-          headers: { 'Content-Type': 'application/json' },
-        }
-      );
+      return NextResponse.json({
+        success: false,
+        error: 'Пользователь с таким email уже существует'
+      }, { status: 400 });
     }
 
-    // Создаем компанию
-    newCompany = await prisma.company.create({
-      data: {
-        name: 'New Company',
-        industry: 'New Industry',
-        size: 100,
-        phone: '',
-        status: 'active',
-      },
-    });
-    console.log('Company created:', JSON.stringify(newCompany, null, 2));
+    // Используем транзакцию для создания всех сущностей
+    const result = await prisma.$transaction(async (tx) => {
+      // 1. Создаем компанию
+      const newCompany = await tx.company.create({
+        data: {
+          name: company.name,
+          industry: company.industry,
+          size: company.size,
+          phone: company.phone || '',
+          status: 'active',
+        },
+      });
 
-    // Создаем пользователя
-    newUser = await prisma.user.create({
-      data: {
-        email: user.email,
-        password: hashedPassword,
-        role: 'COMPANY_OWNER',
-      },
-    });
-    console.log('User created:', JSON.stringify(newUser, null, 2));
+      // 2. Создаем пользователя
+      const hashedPassword = await bcrypt.hash(user.password, 10);
+      const newUser = await tx.user.create({
+        data: {
+          email: user.email,
+          password: hashedPassword,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          role: Role.COMPANY_OWNER,
+        },
+      });
 
-    // Создаем департамент
-    defaultDepartment = await prisma.department.create({
-      data: {
-        name: 'Главный офис',
-        companyId: newCompany.id,
-        description: 'Основной департамент компании',
-      },
-    });
-    console.log('Department created:', JSON.stringify(defaultDepartment, null, 2));
+      // 3. Создаем департамент
+      const defaultDepartment = await tx.department.create({
+        data: {
+          name: 'Главный офис',
+          companyId: newCompany.id,
+          description: 'Основной департамент компании',
+        },
+      });
 
-    // Создаем сотрудника
-    console.log('Creating employee with data:', JSON.stringify({
-      firstName: user.firstName,
-      lastName: user.lastName,
-      position: 'CEO',
-      status: 'active',
-      companyId: newCompany.id,
-      userId: newUser.id,
-      departmentId: defaultDepartment.id,
-      phone: '',
-    }, null, 2));
+      // 4. Создаем сотрудника
+      const newEmployee = await tx.employee.create({
+        data: {
+          firstName: user.firstName,
+          lastName: user.lastName,
+          position: 'CEO',
+          status: 'active',
+          companyId: newCompany.id,
+          userId: newUser.id,
+          departmentId: defaultDepartment.id,
+          phone: company.phone || '',
+        },
+      });
 
-    const newEmployee = await prisma.employee.create({
-      data: {
-        firstName: user.firstName,
-        lastName: user.lastName,
-        position: 'CEO',
-        status: 'active',
-        companyId: newCompany.id,
-        userId: newUser.id,
-        departmentId: defaultDepartment.id,
-        phone: '',
-      },
-    });
-    console.log('Employee created:', JSON.stringify(newEmployee, null, 2));
-    console.log({'newUser.id': newUser.id, 'newCompany.id': newCompany.id});
-
-    // Удаляем транзакцию, так как все записи уже созданы
-    console.log('All entities created successfully');
-
-    // После успешного создания всех сущностей создаем JWT токен
-    const token = jwt.sign({ 
-      userId: newUser.id,
-      email: newUser.email,
-      role: newUser.role,
-      companyId: newCompany.id
-    }, 
-    JWT_SECRET,
-    { 
-      expiresIn: '24h' 
+      return { newCompany, newUser, newEmployee };
     });
 
-    // Обновляем время последнего входа
-    await prisma.user.update({
-      where: { id: newUser.id },
-      data: { lastLogin: new Date() }
-    });
+    // Создаем JWT токен
+    const token = jwt.sign({
+      userId: result.newUser.id,
+      email: result.newUser.email,
+      role: result.newUser.role,
+      companyId: result.newCompany.id
+    }, JWT_SECRET, { expiresIn: '24h' });
 
-    // Возвращаем ответ с токеном
-    return new Response(JSON.stringify({
+    return NextResponse.json({
       success: true,
       message: 'Регистрация успешна',
       data: {
-        companyId: newCompany.id,
-        userId: newUser.id,
-        employeeId: newEmployee.id,
+        companyId: result.newCompany.id,
+        userId: result.newUser.id,
+        employeeId: result.newEmployee.id,
         token: token,
         user: {
-          id: newUser.id,
-          email: newUser.email,
-          role: newUser.role,
-          firstName: newEmployee.firstName,
-          lastName: newEmployee.lastName
+          id: result.newUser.id,
+          email: result.newUser.email,
+          role: result.newUser.role,
+          firstName: result.newEmployee.firstName,
+          lastName: result.newEmployee.lastName
         }
       }
-    }), {
+    }, {
       headers: {
-        'Content-Type': 'application/json',
         'Set-Cookie': `token=${token}; HttpOnly; Path=/; Max-Age=${60 * 60 * 24}; SameSite=Lax${process.env.NODE_ENV === 'production' ? '; Secure' : ''}`
       }
     });
 
   } catch (error) {
-    console.error('Registration error:', {
-      message: error.message,
-      code: error.code,
-      stack: error.stack
-    });
-
-    return Response.json({
+    console.error('Registration error:', error);
+    return NextResponse.json({
       success: false,
       error: 'Ошибка при регистрации',
       details: error.message
-    }, { 
-      status: 500 
-    });
+    }, { status: 500 });
   }
 } 

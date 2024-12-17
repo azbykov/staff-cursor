@@ -1,29 +1,25 @@
-import { NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
-import { cookies } from 'next/headers';
-import * as jwt from 'jsonwebtoken';
+import { getServerSession } from "next-auth/next"
+import { NextResponse } from "next/server"
+import { authOptions } from "@/app/api/auth/[...nextauth]/route"
+import { PrismaClient } from '@prisma/client'
 
-const prisma = new PrismaClient();
-const JWT_SECRET = process.env.JWT_SECRET!;
+const prisma = new PrismaClient()
 
 export async function GET() {
   try {
-    const cookieStore = cookies();
-    const token = cookieStore.get('token')?.value;
+    const session = await getServerSession(authOptions)
+    console.log("Session in /api/users/me:", session)
 
-    if (!token) {
-      return NextResponse.json({ 
-        success: false, 
-        error: 'Не авторизован' 
-      }, { status: 401 });
+    if (!session?.user) {
+      return new NextResponse(
+        JSON.stringify({ error: "Не авторизован" }),
+        { status: 401 }
+      )
     }
 
-    const decoded = jwt.verify(token, JWT_SECRET) as {
-      userId: string;
-    };
-
+    // Получаем расширенные данные пользователя из базы
     const user = await prisma.user.findUnique({
-      where: { id: decoded.userId },
+      where: { id: session.user.id },
       select: {
         id: true,
         email: true,
@@ -33,29 +29,25 @@ export async function GET() {
         employee: {
           select: {
             position: true,
-            department: true
+            department: {
+              select: {
+                name: true
+              }
+            }
           }
         }
       }
     });
 
-    if (!user) {
-      return NextResponse.json({ 
-        success: false, 
-        error: 'Пользователь не найден' 
-      }, { status: 404 });
-    }
-
-    return NextResponse.json({
-      success: true,
-      user
-    });
-
-  } catch (error) {
-    console.error('Error fetching user:', error);
     return NextResponse.json({ 
-      success: false, 
-      error: 'Ошибка при получении данных пользователя' 
-    }, { status: 500 });
+      success: true,
+      user 
+    })
+  } catch (error) {
+    console.error("Error in /api/users/me:", error)
+    return new NextResponse(
+      JSON.stringify({ error: "Внутренняя ошибка сервера" }),
+      { status: 500 }
+    )
   }
 } 
